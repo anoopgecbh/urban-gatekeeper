@@ -1,0 +1,122 @@
+/* =====================================================================
+   URBAN GATEKEEPER — WAITLIST -> GOOGLE SHEET (Google Apps Script)
+   =====================================================================
+
+   WHAT THIS DOES
+   Receives waitlist form submissions from the landing page and appends
+   each one as a new row in your Google Sheet. Optionally emails you a
+   notification for every new signup.
+
+   ----------------------------------------------------------------------
+   SETUP — one time, ~5 minutes
+   ----------------------------------------------------------------------
+   1. Go to https://sheets.google.com and create a new blank spreadsheet.
+      Name it e.g. "Urban Gatekeeper — Waitlist".
+
+   2. In that sheet, open  Extensions > Apps Script.
+
+   3. Delete any code in the editor and paste in EVERYTHING below
+      this comment block.
+
+   4. (Optional) Set NOTIFY_EMAIL below if you want an email alert
+      on every new signup.
+
+   5. Click  Deploy > New deployment.
+        - Click the gear icon > select "Web app".
+        - Description:        Urban Gatekeeper Waitlist
+        - Execute as:         Me
+        - Who has access:     Anyone
+      Click Deploy. Authorise the permissions when prompted
+      (choose your account > Advanced > Go to project > Allow).
+
+   6. Copy the "Web app URL" it gives you. It ends in /exec .
+
+   7. Open the landing page HTML, find this line near the bottom:
+          const GOOGLE_SHEET_URL = 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
+      Replace the placeholder with your /exec URL. Save. Done.
+
+   To TEST: run the function `testAppend` once from the Apps Script
+   editor — a sample row should appear in your sheet.
+
+   NOTE: If you ever change this script, you must create a NEW deployment
+   (or "Manage deployments" > edit > new version) for changes to take effect.
+   ===================================================================== */
+
+// Optional: put your email here to get notified on each signup. Leave '' to disable.
+var NOTIFY_EMAIL = 'anoop.singh@coyasoft.com';
+
+var HEADERS = ['Timestamp', 'Full Name', 'Company / Community', 'Work Email',
+               'Phone', 'Units / Team Size', 'Interested In', 'Message', 'Source'];
+
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+
+    // Write header row once
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(HEADERS);
+      sheet.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
+      sheet.setFrozenRows(1);
+    }
+
+    sheet.appendRow([
+      data.timestamp || new Date().toISOString(),
+      data.name     || '',
+      data.company  || '',
+      data.email    || '',
+      data.phone    || '',
+      data.size     || '',
+      data.interest || '',
+      data.message  || '',
+      data.source   || 'Urban Gatekeeper Landing Page'
+    ]);
+
+    if (NOTIFY_EMAIL) {
+      MailApp.sendEmail({
+        to: NOTIFY_EMAIL,
+        subject: 'New Urban Gatekeeper waitlist signup — ' + (data.name || 'Unknown'),
+        body: 'A new waitlist signup was received:\n\n'
+            + 'Name:       ' + (data.name    || '-') + '\n'
+            + 'Company:    ' + (data.company || '-') + '\n'
+            + 'Email:      ' + (data.email   || '-') + '\n'
+            + 'Phone:      ' + (data.phone   || '-') + '\n'
+            + 'Size:       ' + (data.size    || '-') + '\n'
+            + 'Interested: ' + (data.interest|| '-') + '\n'
+            + 'Message:    ' + (data.message || '-') + '\n\n'
+            + 'Logged in your Google Sheet.'
+      });
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: 'success' }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: 'error', message: String(err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// Lets you confirm the web app is live by visiting the /exec URL in a browser.
+function doGet() {
+  return ContentService
+    .createTextOutput('Urban Gatekeeper waitlist endpoint is running.')
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
+// Run this once from the editor to drop a test row into the sheet.
+function testAppend() {
+  doPost({ postData: { contents: JSON.stringify({
+    timestamp: new Date().toISOString(),
+    name: 'Test User',
+    company: 'Test Community',
+    email: 'test@example.com',
+    phone: '+1 555 000 0000',
+    size: '120 units',
+    interest: 'Both solutions',
+    message: 'This is a test submission.',
+    source: 'Apps Script test'
+  }) } });
+}
